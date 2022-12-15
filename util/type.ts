@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 import { TransactionReceipt } from "@ethersproject/abstract-provider";
-import { ChainId, ChainKey } from "@lifi/types";
+import { ChainId, ChainKey, StatusResponse } from "@lifi/types";
 
 export type MyTransactionReceipt = {
   chainId: ChainId;
@@ -15,7 +15,7 @@ export type FindChainReturn = {
 export type ResolveTransactionReturn = {
   errorFlag: boolean;
   errorMessage?: string;
-  jsonResult?: string
+  status?: StatusResponse;
 };
 
 export type FindChainApiResponse = {

@@ -1,30 +1,86 @@
-import { useRouter } from "next/router";
-import { useQuery } from "@tanstack/react-query";
-import { ResolveTransactionReturn } from "../../../util/type";
+import { LIFICONFIG } from "../../../util/const";
+import { ChainKey, StatusResponse } from "@lifi/types";
 import { getTransactionDetails } from "../../../util/api";
-import { ChainKey } from "@lifi/types";
+import TrasactionStatus from "../../../components/TransactionStatus";
 
-const Transaction = () => {
-  const router = useRouter();
-  const { chain, id } = router.query;
-  const { data, isLoading } = useQuery<ResolveTransactionReturn>(
-    ["resolveTx", chain, id],
-    ({ queryKey }) => {
-      return getTransactionDetails({ queryKey });
-    },
-    {
-      enabled: typeof chain !== "undefined",
-    }
-  );
+export const getServerSideProps = async (context: {
+  params: {
+    chain: ChainKey;
+    id: string;
+  };
+}) => {
+  const { chain, id: txHash } = context.params;
 
-  if (isLoading) {
-    return <div>Loading</div>;
+  if (!Object.keys(LIFICONFIG).includes(chain)) {
+    return {
+      props: {
+        badChain: true,
+        badTx: false,
+      },
+    };
+  }
+
+  if (!/^0x([A-Fa-f0-9]{64})$/.test(txHash)) {
+    return {
+      props: {
+        badChain: false,
+        badTx: true,
+      },
+    };
+  }
+
+  const result = await getTransactionDetails({ chain, txHash });
+
+  if (result.errorFlag) {
+    return {
+      props: {
+        badChain: false,
+        badTx: false,
+        errorFlag: false,
+        errorMessage: result.errorMessage,
+      },
+    };
   } else {
-    if (data?.errorFlag) {
-      return <div>{`Error occured: ${data.errorMessage}`}</div>;
-    } else {
-      return <div><pre>{data?.jsonResult}</pre></div>;
-    }
+    return {
+      props: {
+        badChain: false,
+        badTx: false,
+        errorFlag: false,
+        status: result.status,
+      },
+    };
+  }
+};
+
+const Transaction = ({
+  badChain,
+  badTx,
+  errorFlag,
+  errorMessage,
+  status,
+}: {
+  badChain: boolean;
+  badTx: boolean;
+  errorFlag: boolean;
+  errorMessage?: string;
+  status?: StatusResponse;
+}) => {
+  if (badChain) {
+    return <div>Bad Chain, Please check the URL</div>;
+  }
+
+  if (badTx) {
+    return <div>Bad TX, Please check the URL</div>;
+  }
+
+  if (errorFlag) {
+    return <div>{errorMessage}</div>;
+  } else {
+    return (
+      <div>
+        <TrasactionStatus status={status!}></TrasactionStatus>
+      </div>
+    );
   }
 };
 

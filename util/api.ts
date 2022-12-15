@@ -4,6 +4,7 @@ import {
   BridgeTool,
   ChainId,
   ChainKey,
+  GetStatusRequest,
 } from "@lifi/types";
 import { Log } from "@ethersproject/abstract-provider";
 import { ethers } from "ethers";
@@ -17,7 +18,14 @@ import {
   LIFI_ABI,
   providerArray,
 } from "./const";
-import { FailError, InitError, NullValueError, UnsupportError } from "./error";
+import {
+  FailError,
+  InitError,
+  NullValueError,
+  TxFetchError,
+  TxStatusError,
+  UnsupportError,
+} from "./error";
 import { FindChainReturn, ResolveTransactionReturn } from "./type";
 import { awaitWrap, awaitWrapRPCWithTimeout } from "./utils";
 import LIFI, { NotFoundError } from "@lifi/sdk";
@@ -82,78 +90,93 @@ export async function findTransactionChain(
 }
 
 export async function getTransactionDetails({
-  queryKey,
+  chain,
+  txHash,
 }: {
-  queryKey: any;
+  chain: ChainKey;
+  txHash: string;
 }): Promise<ResolveTransactionReturn> {
-  const chainKey = queryKey[1] as ChainKey;
-  const txHash = queryKey[2];
-  const rpc = LIFICONFIG[chainKey]!.RPC;
-  const provider = new ethers.providers.JsonRpcBatchProvider(rpc);
-  let { result: receipt, error } = await awaitWrap(
-    provider.getTransactionReceipt(txHash)
-  );
-
-  if (error) {
-    const backRpc = LIFICONFIG[chainKey]!.BackUpRPC;
-    const backUpProvider = new ethers.providers.JsonRpcBatchProvider(backRpc);
-    const { result: backUpReceipt, error: backUpError } = await awaitWrap(
-      backUpProvider.getTransactionReceipt(txHash)
+  try {
+    const rpc = LIFICONFIG[chain]!.RPC;
+    const provider = new ethers.providers.JsonRpcBatchProvider(rpc);
+    let { result: receipt, error } = await awaitWrap(
+      provider.getTransactionReceipt(txHash)
     );
 
-    if (backUpError) {
+    if (error) {
+      const backRpc = LIFICONFIG[chain]!.BackUpRPC;
+      const backUpProvider = new ethers.providers.JsonRpcBatchProvider(backRpc);
+      const { result: backUpReceipt, error: backUpError } = await awaitWrap(
+        backUpProvider.getTransactionReceipt(txHash)
+      );
+
+      if (backUpError) {
+        return {
+          errorFlag: true,
+          errorMessage: backUpError?.message ?? "Unknown Error Reason.",
+        };
+      } else {
+        receipt = backUpReceipt;
+      }
+    }
+
+    const status = receipt!.status;
+
+    if (status === 0) throw new FailError();
+    const toAddress = receipt!.to;
+
+    if (!toAddress) throw new InitError();
+
+    const from = chain;
+    let bridge: BridgeTool;
+    let to: ChainKey;
+    let targetLogs: Array<Log>;
+    let targetLog: Log;
+
+    if (toAddress === CONTRACT.LIFI) {
+      const lifiAbiInterface = new ethers.utils.Interface(LIFI_ABI);
+      targetLogs = receipt!.logs.filter(
+        (log) =>
+          log.topics[0] ===
+          CONTRACT_EVENT_TOPIC.LIFI_TRANSFER_STARTED_EVENT_TOPIC
+      );
+
+      if (targetLogs.length !== 1) throw new UnsupportError();
+      [targetLog] = targetLogs;
+      const log = lifiAbiInterface.parseLog({
+        topics: targetLog.topics,
+        data: targetLog.data,
+      });
+
+      bridge = log.args.bridgeData.bridge;
+      to =
+        chainIdToChainName[log.args.bridgeData.destinationChainId.toNumber()];
+
+      const api = new LIFI();
+      const para: GetStatusRequest = {
+        fromChain: from,
+        toChain: to,
+        bridge: bridge,
+        txHash: txHash,
+      };
+      const response = await api.getStatus(para);
+      console.log(response);
+      return {
+        errorFlag: false,
+        status: response,
+      };
+    } else throw new UnsupportError();
+  } catch (error: any) {
+    if (error instanceof TxFetchError || error instanceof TxStatusError) {
       return {
         errorFlag: true,
-        errorMessage: backUpError?.message ?? "Unknow Error Reason.",
+        errorMessage: error.tag,
       };
     } else {
-      receipt = backUpReceipt;
+      return {
+        errorFlag: true,
+        errorMessage: error?.message ?? "Unknown Error",
+      };
     }
   }
-
-  const status = receipt!.status;
-
-  if (status === 0) throw new FailError();
-  const toAddress = receipt!.to;
-
-  if (!toAddress) throw new InitError();
-
-  const from = chainKey;
-  let bridge: BridgeTool;
-  let to: ChainKey;
-  let targetLogs: Array<Log>;
-  let targetLog: Log;
-
-  if (toAddress === CONTRACT.LIFI) {
-    const lifiAbiInterface = new ethers.utils.Interface(LIFI_ABI);
-    targetLogs = receipt!.logs.filter(
-      (log) =>
-        log.topics[0] === CONTRACT_EVENT_TOPIC.LIFI_TRANSFER_STARTED_EVENT_TOPIC
-    );
-
-    if (targetLogs.length !== 1) throw new UnsupportError();
-    [targetLog] = targetLogs;
-    const log = lifiAbiInterface.parseLog({
-      topics: targetLog.topics,
-      data: targetLog.data,
-    });
-
-    bridge = log.args.bridgeData.bridge;
-    to = chainIdToChainName[log.args.bridgeData.destinationChainId.toNumber()];
-
-    const api = new LIFI();
-    const para = {
-      fromChain: from,
-      toChain: to,
-      bridge: bridge,
-      txHash: txHash,
-    };
-    console.log(para);
-    const response = await api.getStatus(para);
-
-    return {
-      errorFlag: false,
-      jsonResult: JSON.stringify(response, null, 2),
-    };
-  } else throw new UnsupportError();
 }

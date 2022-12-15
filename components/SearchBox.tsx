@@ -114,8 +114,6 @@ const SearchBox = ({ placeholder }: { placeholder: string }) => {
           </ul>
         )}
       </div>
-      {/* <button onClick={() => refetch()}>Click Me</button>
-      {isLoading ? <div>Loading</div> : <div>{data}</div>} */}
     </div>
   );
 };
