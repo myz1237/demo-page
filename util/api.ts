@@ -1,21 +1,16 @@
-import {
-  Bridge,
-  BridgeDefinition,
-  BridgeTool,
-  ChainId,
-  ChainKey,
-  GetStatusRequest,
-} from "@lifi/types";
 import { Log } from "@ethersproject/abstract-provider";
+import LIFI from "@lifi/sdk";
+import { BridgeTool, ChainKey, GetStatusRequest } from "@lifi/types";
 import { ethers } from "ethers";
+
 import {
   backUpProviderArray,
   chainIdToChainName,
   CONTRACT,
   CONTRACT_EVENT_TOPIC,
   ERROR_TAG,
-  LIFICONFIG,
   LIFI_ABI,
+  LIFICONFIG,
   providerArray,
 } from "./const";
 import {
@@ -28,7 +23,6 @@ import {
 } from "./error";
 import { FindChainReturn, ResolveTransactionReturn } from "./type";
 import { awaitWrap, awaitWrapRPCWithTimeout } from "./utils";
-import LIFI, { NotFoundError } from "@lifi/sdk";
 
 export async function findTransactionChain(
   txHash: string
@@ -99,6 +93,7 @@ export async function getTransactionDetails({
   try {
     const rpc = LIFICONFIG[chain]!.RPC;
     const provider = new ethers.providers.JsonRpcBatchProvider(rpc);
+    // eslint-disable-next-line prefer-const
     let { result: receipt, error } = await awaitWrap(
       provider.getTransactionReceipt(txHash)
     );
@@ -135,6 +130,7 @@ export async function getTransactionDetails({
 
     if (toAddress === CONTRACT.LIFI) {
       const lifiAbiInterface = new ethers.utils.Interface(LIFI_ABI);
+
       targetLogs = receipt!.logs.filter(
         (log) =>
           log.topics[0] ===
@@ -160,7 +156,7 @@ export async function getTransactionDetails({
         txHash: txHash,
       };
       const response = await api.getStatus(para);
-      console.log(response);
+
       return {
         errorFlag: false,
         status: response,

@@ -232,6 +232,17 @@ export const chainIdToChainName: {
   };
   return pre;
 }, {});
+
+export const chainIdToChainFullName: {
+  [id: number]: ChainKey;
+} = Object.values(LIFICONFIG).reduce((pre, cur) => {
+  pre = {
+    ...pre,
+    [cur.ID]: cur.FullName,
+  };
+  return pre;
+}, {});
+
 export const CONTRACT = {
   LIFI: "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
 };

@@ -68,3 +68,9 @@ export function isValidUrl(url: string) {
     return false;
   }
 }
+
+export function capitalizeFirstLetter(stringValue: string) {
+  return (
+    stringValue.charAt(0).toUpperCase() + stringValue.slice(1).toLowerCase()
+  );
+}
